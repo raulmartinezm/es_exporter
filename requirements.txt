@@ -1,0 +1,5 @@
+prometheus_client
+arrow==0.10.0
+prometheus-client==0.0.18
+requests==2.12.4
+

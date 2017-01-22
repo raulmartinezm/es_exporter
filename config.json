@@ -1,0 +1,17 @@
+{
+  "name" : "freeradius_login_attempts",
+  "type" : "gauge",
+  "help" : "Freeradius login attempts result",
+  "fields" : {
+    "login-ok": {
+      "port": 9200,
+      "host": "http://localhost",
+      "field": "login_result",
+      "match": "OK"
+    },
+    "login-incorrect": {
+    "field": "login_result",
+    "match": "incorrect"
+    }
+  }
+}
