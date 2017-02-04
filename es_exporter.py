@@ -6,6 +6,7 @@ import arrow
 import requests
 from prometheus_client import start_http_server
 from prometheus_client.core import GaugeMetricFamily, REGISTRY
+from urllib3 import Timeout
 
 LOGSTASH_INDEX_PREFIX = 'filebeat'
 URL = "http://localhost:9200/%s-%s.%s.%s/_search"
@@ -31,19 +32,20 @@ class ESCollector(object):
 
         occurences = {}  # aux dict to store name and value
 
+        # execute if not first scrape
         if self.last_scrape_timestamp != 0:
-            # execute if not first scrape request
+
             for (item, values) in self.config["fields"].items():
                 response = make_request_to_es(SEARCH_TERM_RANGE % (
                     values["field"], values["match"], arrow.get(self.last_scrape_timestamp),
                     arrow.get(arrow.utcnow().timestamp)))
-                occurences[item] = response["hits"]["total"]
-
+                if response is not None:
+                    occurences[item] = response["hits"]["total"]
 
         else:  # if first run set values to 0
             logging.debug("First run of collector, set occurences to 0")
             for (item, values) in self.config["fields"].items():
-                occurences[item] = 0
+                occurences[item] = 0.0
 
         # Add result to metric
         for (key, value) in occurences.items():
@@ -51,10 +53,10 @@ class ESCollector(object):
             logging.debug("Add metric %s value %d to prometheus" % (key, value))
             metric.add_metric(labellist, float(value))
 
-        # store timestamp for the next scrape
-        self.last_scrape_timestamp = arrow.utcnow()
         logging.debug("Last scrape timestamp set to %s" % self.last_scrape_timestamp)
 
+        # store timestamp for the next scrape
+        self.last_scrape_timestamp = arrow.utcnow()
         # return result
         yield metric
 
@@ -65,13 +67,14 @@ Make a request to Elastisearch
 
 
 def make_request_to_es(query):
+    pass
     now = datetime.datetime.now()
     url = (URL % (LOGSTASH_INDEX_PREFIX, now.year, ("%02d" % now.month), ("%02d" % now.day)))
 
     try:
         r = requests.get(url, data=query)
-    except Exception:
-        logging.error("Connection to %s refused" % url)
+    except requests.exceptions.RequestException:
+        logging.debug("Request to %s error." % url)
         return
 
     return r.json()
@@ -91,10 +94,11 @@ def get_timestamp_from_request(result, item_number=0):
 
 
 def load_configuration():
-    with open('/opt/es_exporter/config.json', 'r') as f:
+    with open('./config.json', 'r') as f:
         config = json.load(f)
         logging.info("Configuration loaded.")
     return config
+
 
 def main(last_scrape_timestamp=0):
     # if last_scrape_timestamp == 0:  # if first time scrape
@@ -112,7 +116,9 @@ def main(last_scrape_timestamp=0):
     REGISTRY.register(collector)
     start_http_server(SERVER_PORT)
     logging.info("ES exporter started listening on port %s " % SERVER_PORT)
-    while True: time.sleep(1)
+
+    while True:
+        time.sleep(1)
 
 
 if __name__ == "__main__":
